@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manažér vodiča taxislužby</title>
+
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-image: url('menu-bg.jpg'); /* sem dáš fotku */
+    background-size: cover;
+    background-position: center;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Apple blur overlay */
+  #overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    backdrop-filter: blur(18px) brightness(0.75);
+    background: rgba(0,0,0,0.25);
+  }
+
+  #content {
+    position: relative;
+    z-index: 10;
+    text-align: center;
+    color: white;
+    padding-top: 80px;
+  }
+
+  h1 {
+    font-size: 42px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+
+  h2 {
+    font-size: 20px;
+    opacity: 0.85;
+    margin-bottom: 40px;
+  }
+
+  .menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    width: 260px;
+    margin: 0 auto;
+  }
+
+  .menu-btn {
+    padding: 16px;
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 16px;
+    border: none;
+    background: rgba(255,255,255,0.25);
+    color: white;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    transition: 0.2s ease;
+    cursor: pointer;
+  }
+
+  .menu-btn:hover {
+    background: rgba(255,255,255,0.35);
+    transform: scale(1.03);
+  }
+
+  .menu-btn:active {
+    transform: scale(0.97);
+  }
+
+  /* COPYRIGHT */
+  #copyright {
+    position: fixed;
+    bottom: 12px;
+    width: 100%;
+    text-align: center;
+    color: rgba(255,255,255,0.75);
+    font-size: 13px;
+    z-index: 20;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="overlay"></div>
+
+<div id="content">
+  <h1>Manažér vodiča taxislužby</h1>
+  <h2>Vyberte službu</h2>
+
+  <div class="menu-buttons">
+    <button class="menu-btn" onclick="openApp('taxameter')">🚕 Taxameter</button>
+    <button class="menu-btn" onclick="openApp('casovky')">⏱️ Časovky</button>
+    <button class="menu-btn" onclick="openApp('sluzby')">📍 Služby</button>
+    <button class="menu-btn" onclick="openApp('nastavenia')">⚙️ Nastavenia</button>
+  </div>
+</div>
+
+<div id="copyright">
+  © Peter Lukáč 2025
+</div>
+
+<script>
+function openApp(app) {
+  switch(app) {
+    case "taxameter":
+      window.location.href = "index.html";
+      break;
+    case "casovky":
+      window.location.href = "casovky.html";
+      break;
+    case "sluzby":
+      window.location.href = "sluzby.html";
+      break;
+    case "nastavenia":
+      window.location.href = "nastavenia.html";
+      break;
+  }
+}
+</script>
+
+</body>
+</html>
