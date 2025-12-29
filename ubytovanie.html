@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ubytovanie v okolí</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  body.light {
+    background: #f2f2f7;
+    color: #000;
+  }
+
+  body.dark {
+    background: #1c1c1e;
+    color: #fff;
+  }
+
+  #top {
+    padding: 16px;
+    font-size: 22px;
+    font-weight: 600;
+    text-align: center;
+    backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  body.light #top {
+    background: rgba(255,255,255,0.9);
+    color: #000;
+  }
+
+  body.dark #top {
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+  }
+
+  #container {
+    padding: 20px;
+  }
+
+  #map {
+    height: 260px;
+    border-radius: 14px;
+    margin-bottom: 20px;
+  }
+
+  .item {
+    padding: 14px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  body.light .item {
+    background: #fff;
+    border: 1px solid #ddd;
+  }
+
+  body.dark .item {
+    background: #2c2c2e;
+    border: 1px solid #444;
+  }
+
+  .item:hover {
+    transform: scale(1.02);
+  }
+
+  .item-title {
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  .item-sub {
+    font-size: 13px;
+    opacity: 0.8;
+  }
+
+  .item-distance {
+    font-size: 13px;
+    margin-top: 4px;
+    color: #007aff;
+  }
+
+  #back {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-size: 15px;
+    z-index: 20;
+  }
+
+  body.light #back {
+    background: #0A84FF;
+    color: white;
+  }
+
+  body.dark #back {
+    background: #0A84FF;
+    color: white;
+  }
+
+  #status {
+    font-size: 13px;
+    opacity: 0.8;
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="top">Ubytovanie v okolí</div>
+
+<div id="container">
+  <div id="status">Získavam polohu…</div>
+  <div id="map"></div>
+  <div id="results"></div>
+</div>
+
+<a id="back" href="sluzby.html">← Späť</a>
+
+<script>
+/* AUTO LIGHT/DARK */
+(function() {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 18) {
+    document.body.classList.add("light");
+  } else {
+    document.body.classList.add("dark");
+  }
+})();
+
+/* Pomocná funkcia – vzdialenosť v km */
+function distKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* MAPA */
+let map = L.map("map").setView([48.7394, 19.1536], 13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+let userMarker = null;
+let userLat = null;
+let userLon = null;
+
+/* ZÍSKANIE GPS */
+navigator.geolocation.getCurrentPosition(pos => {
+  userLat = pos.coords.latitude;
+  userLon = pos.coords.longitude;
+
+  if (userMarker) userMarker.remove();
+  userMarker = L.marker([userLat, userLon]).addTo(map);
+
+  map.setView([userLat, userLon], 14);
+
+  document.getElementById("status").innerText = "Hľadám ubytovanie v okruhu 2 km…";
+
+  loadPlaces(userLat, userLon);
+}, err => {
+  document.getElementById("status").innerText = "Nepodarilo sa získať polohu.";
+});
+
+/* NAČÍTANIE UBYTOVANIA – Overpass */
+async function loadPlaces(lat, lon) {
+  const query = `
+[out:json];
+(
+  node["tourism"="hotel"](around:2000, ${lat}, ${lon});
+  node["tourism"="guest_house"](around:2000, ${lat}, ${lon});
+  node["tourism"="hostel"](around:2000, ${lat}, ${lon});
+  node["tourism"="motel"](around:2000, ${lat}, ${lon});
+  node["tourism"="apartment"](around:2000, ${lat}, ${lon});
+);
+out center;`;
+
+  const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
+
+  let r, j;
+  try {
+    r = await fetch(url);
+    j = await r.json();
+  } catch(e) {
+    document.getElementById("status").innerText = "Chyba pri načítaní dát.";
+    return;
+  }
+
+  const results = document.getElementById("results");
+  results.innerHTML = "";
+
+  if (!j.elements || !j.elements.length) {
+    document.getElementById("status").innerText = "V okruhu 2 km sa nenašlo žiadne ubytovanie.";
+    return;
+  }
+
+  document.getElementById("status").innerText =
+    `Nájdených miest: ${j.elements.length}`;
+
+  j.elements.forEach(p => {
+    const name = (p.tags && (p.tags.name || p.tags["name:sk"])) || "Bez názvu";
+    const street = p.tags && (p.tags["addr:street"] || "");
+    const housenumber = p.tags && (p.tags["addr:housenumber"] || "");
+    const city = p.tags && (p.tags["addr:city"] || "");
+    const addr = [street + (housenumber ? " " + housenumber : ""), city]
+                 .filter(Boolean).join(", ");
+
+    const d = distKm(lat, lon, p.lat, p.lon);
+    const distText = d < 1 ? `${(d*1000).toFixed(0)} m` : `${d.toFixed(2)} km`;
+
+    const div = document.createElement("div");
+    div.className = "item";
+
+    div.innerHTML = `
+      <div class="item-title">${name}</div>
+      <div class="item-sub">${addr || "Adresa nie je k dispozícii"}</div>
+      <div class="item-distance">Vzdialenosť: ${distText}</div>
+    `;
+
+    const marker = L.marker([p.lat, p.lon]).addTo(map);
+    marker.bindPopup(name);
+
+    div.onclick = () => {
+      const url = `https://maps.apple.com/?daddr=${p.lat},${p.lon}`;
+      window.open(url, "_blank");
+    };
+
+    results.appendChild(div);
+  });
+}
+</script>
+
+</body>
+</html>
