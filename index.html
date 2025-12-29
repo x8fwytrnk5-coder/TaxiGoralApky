@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TAXI – trasa po klienta + s klientom</title>
+
+  <!-- Leaflet mapa -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f2f2f7;
+      overflow: hidden;
+      color: #111;
+    }
+
+    /* Horný a spodný panel */
+    #top-panel, #bottom-panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      height: 55px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      background: rgba(255,255,255,0.9);
+      backdrop-filter: blur(20px);
+      z-index: 1000;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    #top-panel {
+      top: 0;
+      justify-content: space-between;
+    }
+
+    #bottom-panel {
+      bottom: 0;
+      justify-content: center;
+      font-size: 13px;
+      color: #555;
+      box-shadow: 0 -1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* Bočné panely */
+    #left-panel, #right-panel {
+      position: fixed;
+      top: 55px;
+      bottom: 55px;
+      width: 290px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px);
+      padding: 18px;
+      overflow-y: auto;
+      z-index: 900;
+      box-shadow: 0 0 10px rgba(0,0,0,0.08);
+    }
+
+    #left-panel {
+      left: 0;
+      border-right: 1px solid rgba(0,0,0,0.05);
+    }
+
+    #right-panel {
+      right: 0;
+      border-left: 1px solid rgba(0,0,0,0.05);
+    }
+
+    /* Mapa v strede */
+    #map {
+      position: fixed;
+      top: 55px;
+      bottom: 55px;
+      left: 290px;
+      right: 290px;
+      z-index: 1;
+    }
+
+    h3 {
+      margin-top: 0;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: #555;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      border-radius: 10px;
+      border: 1px solid #d0d0d5;
+      font-size: 14px;
+      outline: none;
+      background: #fdfdfd;
+    }
+
+    input:focus {
+      border-color: #0A84FF;
+      box-shadow: 0 0 0 2px rgba(10,132,255,0.2);
+    }
+
+    button {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 12px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.05s ease;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .primary-btn {
+      background: #0A84FF;
+      color: #fff;
+    }
+
+    .primary-btn:hover {
+      background: #006FE0;
+    }
+
+    .mode-btn {
+      margin-bottom: 8px;
+    }
+
+    .reset-btn {
+      background: #8E8E93;
+      color: #fff;
+    }
+
+    .reset-btn:hover {
+      background: #6c6c70;
+    }
+
+    /* Výsledok jazdy */
+    #ride-result-label {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 4px;
+    }
+
+    #ride-result {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .zisk {
+      color: #30D158; /* zelená */
+    }
+
+    .strata {
+      color: #FF453A; /* červená */
+    }
+
+    .neutral {
+      color: #111;
+    }
+
+    #detail {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.4;
+      margin-bottom: 18px;
+    }
+
+    /* Malý stavový text vľavo dole */
+    #status {
+      font-size: 11px;
+      color: #777;
+      margin-top: 4px;
+    }
+
+    /* Malý debug panel – voliteľné, zatiaľ len UI */
+    #debug-panel {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #666;
+      max-height: 140px;
+      overflow-y: auto;
+      padding: 8px;
+      border-radius: 10px;
+      background: #f3f3f6;
+      border: 1px solid #e0e0e5;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Horný panel -->
+  <div id="top-panel">
+    <div style="font-size:20px;font-weight:600;">TAXI Panel</div>
+    <div id="clock">--:--</div>
+  </div>
+
+  <!-- Ľavý panel -->
+  <div id="left-panel">
+    <h3>Údaje jazdy</h3>
+
+    <label for="gps-pos">Poloha vozidla (GPS):</label>
+    <input type="text" id="gps-pos" placeholder="Zisťujem polohu..." disabled>
+
+    <label for="pickup">Nástup klienta (presná adresa):</label>
+    <input type="text" id="pickup" placeholder="Napr. Rooseveltova 10, Banská Bystrica">
+
+    <label for="dropoff">Výstup klienta (presná adresa):</label>
+    <input type="text" id="dropoff" placeholder="Napr. Námestie SNP 1, Banská Bystrica">
+
+    <label for="cennik">Cena podľa cenníka (€):</label>
+    <input type="number" id="cennik" min="0" step="0.1" placeholder="Zadaj cenu z cenníka">
+
+    <!-- režimy – B: automatické meranie po klienta cez GPS, s klientom cez OSRM -->
+    <button id="btn-po" class="primary-btn mode-btn">Po klienta (GPS trasa)</button>
+    <button id="btn-s" class="primary-btn mode-btn" disabled>S klientom (výpočet trasy)</button>
+    <button id="btn-stop" class="primary-btn mode-btn" disabled>Stop</button>
+
+    <div id="status">Pripravené. Najprv spusti režim „Po klienta“.</div>
+
+    <div id="debug-panel">
+      <strong>DEBUG:</strong><br>
+    </div>
+  </div>
+
+  <!-- Pravý panel -->
+  <div id="right-panel">
+    <h3>Výsledok jazdy</h3>
+
+    <div id="ride-result-label">Rozdiel (náš výpočet − cenník):</div>
+    <div id="ride-result" class="neutral">0.00 €</div>
+
+    <div id="detail">
+      Zisk alebo strata sa zobrazí po dokončení jazdy a spracovaní cien.
+    </div>
+
+    <hr style="margin:18px 0;border:none;border-top:1px solid rgba(0,0,0,0.06);">
+
+    <button id="reset-btn" class="reset-btn">Reset</button>
+  </div>
+
+  <!-- Mapa v strede -->
+  <div id="map"></div>
+
+  <!-- Spodný panel -->
+  <div id="bottom-panel">
+    © 2025 Peter Lukáč – krupincan@icloud.com
+  </div>
+
+  <!-- Sem pôjde JavaScript – ČASŤ 2 a ČASŤ 3 -->
+<script>
+// ===============================
+//  MAPA – inicializácia
+// ===============================
+let map = L.map("map").setView([48.7394, 19.1536], 13); // Banská Bystrica default
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19
+}).addTo(map);
+
+let gpsMarker = null;
+
+
+// ===============================
+//  GPS – získanie polohy vozidla
+// ===============================
+const gpsField = document.getElementById("gps-pos");
+
+function debug(msg) {
+  const panel = document.getElementById("debug-panel");
+  panel.innerHTML += msg + "<br>";
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function setGpsStatus(text) {
+  gpsField.value = text;
+  debug("GPS: " + text);
+}
+
+if ("geolocation" in navigator) {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+
+      setGpsStatus(lat.toFixed(6) + ", " + lon.toFixed(6));
+      map.setView([lat, lon], 14);
+
+      gpsMarker = L.marker([lat, lon]).addTo(map)
+        .bindPopup("Poloha vozidla").openPopup();
+    },
+    (err) => {
+      setGpsStatus("GPS nedostupné (" + err.code + ")");
+      debug("Chyba GPS: " + err.message);
+    }
+  );
+} else {
+  setGpsStatus("Geolokácia nie je podporovaná");
+  debug("Geolokácia nie je podporovaná");
+}
+
+
+// ===============================
+//  MERANIE TRASY „PO KLIENTA“
+// ===============================
+let mode = "idle"; // idle | po | s
+let lastGPS = null;
+
+let kmPoKlienta = 0;
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI/180;
+  const dLon = (lon2 - lon1) * Math.PI/180;
+
+  const a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+
+// ===============================
+//  GPS sledovanie každé 3 sekundy
+// ===============================
+setInterval(() => {
+  if (mode !== "po") return; // meria sa len v režime Po klienta
+
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+
+    if (!lastGPS) {
+      lastGPS = { lat, lon };
+      return;
+    }
+
+    const km = distanceKm(lastGPS.lat, lastGPS.lon, lat, lon);
+    kmPoKlienta += km;
+
+    debug(`+${km.toFixed(3)} km (po klienta)`);
+
+    lastGPS = { lat, lon };
+  });
+}, 3000);
+
+
+// ===============================
+//  OVLÁDACIE TLAČIDLÁ
+// ===============================
+const btnPo = document.getElementById("btn-po");
+const btnS = document.getElementById("btn-s");
+const btnStop = document.getElementById("btn-stop");
+const statusEl = document.getElementById("status");
+
+btnPo.addEventListener("click", () => {
+  mode = "po";
+  kmPoKlienta = 0;
+  lastGPS = null;
+
+  btnPo.disabled = true;
+  btnS.disabled = false;
+  btnStop.disabled = false;
+
+  statusEl.textContent = "Režim: Po klienta (GPS meranie)";
+  debug("Režim PREPNUTÝ: Po klienta");
+});
+
+</script>
+<script>
+// ===============================
+//  HODINY V HORNOM PANELI
+// ===============================
+function updateClock() {
+  const now = new Date();
+  document.getElementById("clock").innerText =
+    now.toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" });
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+
+// ===============================
+//  PREMENNÉ PRE CENU A VÝSLEDOK
+// ===============================
+let kmSKlientom = 0;
+let cenaPoKlienta = 0;
+let cenaSKlientom = 0;
+let cenaSpolu = 0;
+
+const pickupInput = document.getElementById("pickup");
+const dropoffInput = document.getElementById("dropoff");
+const cennikInput = document.getElementById("cennik");
+
+const resultEl = document.getElementById("ride-result");
+const detailEl = document.getElementById("detail");
+const resetBtn = document.getElementById("reset-btn");
+
+function clearResultClasses() {
+  resultEl.classList.remove("zisk", "strata", "neutral");
+}
+
+function setNeutralResult() {
+  clearResultClasses();
+  resultEl.textContent = "0.00 €";
+  resultEl.classList.add("neutral");
+  detailEl.textContent =
+    "Zisk alebo strata sa zobrazí po dokončení jazdy a spracovaní cien.";
+}
+
+
+// ===============================
+//  Nominatim – geokódovanie adresy
+// ===============================
+async function geocodeAddress(address) {
+  const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
+            + encodeURIComponent(address);
+
+  debug("Geokódujem adresu: " + address);
+
+  const res = await fetch(url, {
+    headers: {
+      "Accept-Language": "sk",
+      "User-Agent": "TaxiApp/1.0 (kontakt: krupincan@icloud.com)"
+    }
+  });
+
+  if (!res.ok) {
+    throw new Error("Nominatim odpoveď " + res.status);
+  }
+
+  const data = await res.json();
+  if (!data || data.length === 0) {
+    throw new Error("Adresa sa nenašla: " + address);
+  }
+
+  const lat = parseFloat(data[0].lat);
+  const lon = parseFloat(data[0].lon);
+
+  debug(`Geokód OK: ${address} → ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+
+  return { lat, lon };
+}
+
+
+// ===============================
+//  OSRM – výpočet trasy v km
+// ===============================
+async function getRouteKm(start, end) {
+  const url =
+    "https://router.project-osrm.org/route/v1/driving/" +
+    start.lon + "," + start.lat + ";" +
+    end.lon + "," + end.lat +
+    "?overview=false";
+
+  debug("OSRM route: " + url);
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("OSRM odpoveď " + res.status);
+  }
+
+  const data = await res.json();
+  if (!data.routes || data.routes.length === 0) {
+    throw new Error("OSRM nenašiel trasu");
+  }
+
+  const meters = data.routes[0].distance;
+  const km = meters / 1000.0;
+
+  debug("OSRM km s klientom: " + km.toFixed(3) + " km");
+
+  return km;
+}
+
+
+// ===============================
+//  PREPOČET A ZOBRAZENIE VÝSLEDKU
+// ===============================
+function computePricesAndShowResult() {
+  // cena po klienta z GPS
+  cenaPoKlienta = kmPoKlienta * 0.40;
+
+  // cena s klientom z OSRM
+  cenaSKlientom = kmSKlientom * 0.85;
+
+  cenaSpolu = cenaPoKlienta + cenaSKlientom;
+
+  const cennikVal = parseFloat(
+    (cennikInput.value || "").toString().replace(",", ".")
+  );
+
+  if (isNaN(cennikVal)) {
+    statusEl.textContent =
+      "Cena podľa cenníka nie je zadaná – výsledok zobrazujem len z nášho výpočtu.";
+    clearResultClasses();
+    resultEl.textContent = cenaSpolu.toFixed(2) + " €";
+    resultEl.classList.add("neutral");
+    detailEl.textContent =
+      `Naša cena spolu: ${cenaSpolu.toFixed(2)} € (po klienta: ` +
+      `${cenaPoKlienta.toFixed(2)} €, s klientom: ${cenaSKlientom.toFixed(2)} €).`;
+    return;
+  }
+
+  const diff = cenaSpolu - cennikVal;
+  const diffAbs = Math.abs(diff).toFixed(2);
+
+  clearResultClasses();
+
+  if (diff > 0) {
+    resultEl.textContent = "+" + diff.toFixed(2) + " €";
+    resultEl.classList.add("zisk");
+    detailEl.textContent =
+      `Zisk oproti cenníku: ${diffAbs} € (naša cena: ${cenaSpolu.toFixed(2)} €, ` +
+      `cenník: ${cennikVal.toFixed(2)} €).`;
+  } else if (diff < 0) {
+    resultEl.textContent = diff.toFixed(2) + " €";
+    resultEl.classList.add("strata");
+    detailEl.textContent =
+      `Strata oproti cenníku: ${diffAbs} € (naša cena: ${cenaSpolu.toFixed(2)} €, ` +
+      `cenník: ${cennikVal.toFixed(2)} €).`;
+  } else {
+    resultEl.textContent = "0.00 €";
+    resultEl.classList.add("neutral");
+    detailEl.textContent =
+      `Žiadny rozdiel – naša cena (${cenaSpolu.toFixed(2)} €) je rovnaká ako cenník.`;
+  }
+
+  statusEl.textContent = "Výsledok jazdy bol prepočítaný.";
+}
+
+
+// ===============================
+//  TLAČIDLO „S klientom“
+//  (geokódovanie + OSRM + výpočet)
+// ===============================
+btnS.addEventListener("click", async () => {
+  const pickup = pickupInput.value.trim();
+  const dropoff = dropoffInput.value.trim();
+
+  if (!pickup || !dropoff) {
+    statusEl.textContent = "Zadaj presnú adresu nástupu aj výstupu.";
+    debug("Chýbajú adresy – nástup alebo výstup.");
+    return;
+  }
+
+  mode = "s";
+  btnS.disabled = true;
+
+  statusEl.textContent = "Spracúvam trasu S klientom (geokódovanie + OSRM)...";
+  debug("Režim PREPNUTÝ: S klientom (výpočet trasy)");
+
+  try {
+    const start = await geocodeAddress(pickup);
+    const end = await geocodeAddress(dropoff);
+
+    kmSKlientom = await getRouteKm(start, end);
+
+    // môžeme (voliteľne) vykresliť čiaru v mape
+    const routeLine = L.polyline(
+      [
+        [start.lat, start.lon],
+        [end.lat, end.lon]
+      ],
+      { color: "#0A84FF", weight: 4, opacity: 0.8 }
+    ).addTo(map);
+
+    map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+
+    debug("kmPoKlienta: " + kmPoKlienta.toFixed(3) + " km");
+    debug("kmSKlientom: " + kmSKlientom.toFixed(3) + " km");
+
+    computePricesAndShowResult();
+
+    statusEl.textContent = "Hotovo. Trasa S klientom bola spracovaná.";
+
+  } catch (err) {
+    console.error(err);
+    debug("Chyba pri spracovaní trasy s klientom: " + err.message);
+    statusEl.textContent =
+      "Chyba pri spracovaní trasy s klientom: " + err.message;
+    btnS.disabled = false; // umožniť skúsiť znova
+  }
+});
+
+
+// ===============================
+//  TLAČIDLO „Stop“
+// ===============================
+btnStop.addEventListener("click", () => {
+  mode = "idle";
+  statusEl.textContent = "Režim: Stop. Jazda ukončená.";
+
+  btnPo.disabled = false;
+  btnS.disabled = false;
+  btnStop.disabled = true;
+
+  debug("Režim PREPNUTÝ: Stop");
+});
+
+
+// ===============================
+//  RESET – vyčistenie všetkého
+// ===============================
+resetBtn.addEventListener("click", () => {
+  mode = "idle";
+
+  kmPoKlienta = 0;
+  kmSKlientom = 0;
+  cenaPoKlienta = 0;
+  cenaSKlientom = 0;
+  cenaSpolu = 0;
+
+  pickupInput.value = "";
+  dropoffInput.value = "";
+  cennikInput.value = "";
+
+  btnPo.disabled = false;
+  btnS.disabled = true;
+  btnStop.disabled |= true;
+
+  lastGPS = null;
+
+  setNeutralResult();
+  statusEl.textContent = "Formulár bol resetovaný. Pripravené na novú jazdu.";
+
+  const panel = document.getElementById("debug-panel");
+  panel.innerHTML = "<strong>DEBUG:</strong><br>";
+
+  debug("Reset všetkých hodnôt.");
+});
+</script>
+</body>
+</html>
