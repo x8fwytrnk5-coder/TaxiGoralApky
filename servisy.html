@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Servisy v okolí</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* Svetlý režim */
+  body.light {
+    background: #f2f2f7;
+    color: #000;
+  }
+
+  /* Tmavý režim */
+  body.dark {
+    background: #1c1c1e;
+    color: #fff;
+  }
+
+  #top {
+    padding: 16px;
+    font-size: 22px;
+    font-weight: 600;
+    text-align: center;
+    backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+  }
+
+  body.light #top {
+    background: rgba(255,255,255,0.9);
+    color: #000;
+  }
+
+  body.dark #top {
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+  }
+
+  #container {
+    padding: 20px;
+  }
+
+  #map {
+    height: 260px;
+    border-radius: 14px;
+    margin-bottom: 20px;
+  }
+
+  .item {
+    padding: 14px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  body.light .item {
+    background: #fff;
+    border: 1px solid #ddd;
+  }
+
+  body.dark .item {
+    background: #2c2c2e;
+    border: 1px solid #444;
+  }
+
+  .item:hover {
+    transform: scale(1.02);
+  }
+
+  #back {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-size: 15px;
+  }
+
+  body.light #back {
+    background: #0A84FF;
+    color: white;
+  }
+
+  body.dark #back {
+    background: #0A84FF;
+    color: white;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="top">Servisy v okolí</div>
+
+<div id="container">
+  <div id="map"></div>
+  <div id="results"></div>
+</div>
+
+<a id="back" href="sluzby.html">← Späť</a>
+
+<script>
+/* AUTO LIGHT/DARK */
+(function() {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 18) {
+    document.body.classList.add("light");
+  } else {
+    document.body.classList.add("dark");
+  }
+})();
+
+/* MAPA */
+let map = L.map("map").setView([48.7394, 19.1536], 13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+let userMarker = null;
+
+/* ZÍSKANIE GPS */
+navigator.geolocation.getCurrentPosition(pos => {
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+
+  if (userMarker) userMarker.remove();
+  userMarker = L.marker([lat, lon]).addTo(map);
+
+  map.setView([lat, lon], 14);
+
+  loadPlaces(lat, lon);
+});
+
+/* NAČÍTANIE SERVISOV */
+async function loadPlaces(lat, lon) {
+
+  const url =
+    `https://nominatim.openstreetmap.org/search?` +
+    `format=json&` +
+    `limit=30&` +
+    `addressdetails=1&` +
+    `extratags=1&` +
+    `namedetails=1&` +
+    `q=car repair OR car service OR tyres OR tyre service OR towing OR breakdown service&` +
+    `viewbox=${lon-0.02},${lat+0.02},${lon+0.02},${lat-0.02}&bounded=1`;
+
+  const r = await fetch(url);
+  const j = await r.json();
+
+  const results = document.getElementById("results");
+  results.innerHTML = "";
+
+  if (!j.length) {
+    results.innerHTML = "<i>V okolí sa nenašiel žiadny servis.</i>";
+    return;
+  }
+
+  j.forEach(p => {
+    const div = document.createElement("div");
+    div.className = "item";
+
+    const name = p.namedetails?.name || p.display_name.split(",")[0];
+
+    div.innerHTML = `
+      <b>${name}</b><br>
+      <small>${p.display_name}</small>
+    `;
+
+    div.onclick = () => {
+      const url = `https://maps.apple.com/?daddr=${p.lat},${p.lon}`;
+      window.open(url, "_blank");
+    };
+
+    results.appendChild(div);
+  });
+}
+</script>
+
+</body>
+</html>
